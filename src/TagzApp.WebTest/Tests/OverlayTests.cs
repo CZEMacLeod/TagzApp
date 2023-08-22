@@ -25,10 +25,16 @@ public class OverlayTests : TestsBase
 
     // If required 2 browser instances can be setup instead
 
-    //await using var browser1 = await WebApp.CreateCustomPlaywrightBrowserPageAsync();
-    //await using var browser2 = await WebApp.CreateCustomPlaywrightBrowserPageAsync();
+    //await using var browser1 = await WebApp.CreateCustomPlaywrightBrowserPageAsync(browserOptions: (options) => { options.Headless = false; });
+    //await using var browser2 = await WebApp.CreateCustomPlaywrightBrowserPageAsync(browserOptions: (options) => { options.Headless = false; });
     //var mainPage = browser1.Page;
     //var overlayPage = browser2.Page;
+
+    //await using var mainTrace = await mainPage.TraceAsync("Click Message On Waterfall", true, true, true, prefix: "main");
+    //mainTrace.Show = C3D.Extensions.Playwright.AspNetCore.Utilities.PlaywrightTraceShow.OnClose;
+
+    //await using var overlayTrace = await overlayPage.TraceAsync("Overlay shows message from waterfall", true, true, true, prefix: "overlay");
+    //overlayTrace.Show = C3D.Extensions.Playwright.AspNetCore.Utilities.PlaywrightTraceShow.OnClose;
 
 
     await mainPage.GotoAsync("/");

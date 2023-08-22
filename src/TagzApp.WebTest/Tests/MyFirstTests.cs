@@ -21,6 +21,8 @@ public class MyFirstTests : TestsBase
 
     string? firstHashtagContent = await page.Locator(".hashtags").First.TextContentAsync();
     Assert.Equal("dotnet", firstHashtagContent);
+
+    await page.CloseAsync();
   }
 
   [Fact]
@@ -42,6 +44,8 @@ public class MyFirstTests : TestsBase
     {
       Timeout = 5000
     });
+
+    await page.CloseAsync();
   }
 
   [Fact]
@@ -71,5 +75,7 @@ public class MyFirstTests : TestsBase
 
     Assert.True(parsedTimes.All(pt => pt.success));
     Assert.Equal(parsedTimes.Select(pt => pt.time).OrderByDescending(pt => pt), parsedTimes.Select(pt => pt.time));
+
+    await page.CloseAsync();
   }
 }
