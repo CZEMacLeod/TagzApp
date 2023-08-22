@@ -8,7 +8,7 @@ namespace TagzApp.Providers.TwitchChat;
 public class TwitchChatProvider : ISocialMediaProvider, IDisposable
 {
 	private bool _DisposedValue;
-	private IChatClient? _Client;
+	private readonly IChatClient _Client;
 
 	public string Id => "TWITCH";
 	public string DisplayName => "TwitchChat";
@@ -22,19 +22,12 @@ public class TwitchChatProvider : ISocialMediaProvider, IDisposable
 
 	public TwitchChatProvider(IOptions<TwitchChatConfiguration> settings, ILogger<TwitchChatProvider> logger, IHttpClientFactory clientFactory)
 	{
-
 		_Settings = settings.Value;
 		_Logger = logger;
 		_ProfileRepository = new TwitchProfileRepository(_Settings.ClientId, _Settings.ClientSecret, clientFactory.CreateClient("TwitchProfile"));
+		_Client = new ChatClient(Channel, _Settings.ChatBotName, _Settings.OAuthToken, _Logger);
+
 		ListenForMessages();
-	}
-
-	internal TwitchChatProvider(IOptions<TwitchChatConfiguration> settings, ILogger<TwitchChatProvider> logger, IChatClient chatClient )
-	{
-
-		_Settings = settings.Value;
-		_Logger = logger;
-		ListenForMessages(chatClient);
 	}
 
 	/// <summary>
@@ -44,10 +37,8 @@ public class TwitchChatProvider : ISocialMediaProvider, IDisposable
 
 	private async Task ListenForMessages(IChatClient chatClient = null)
 	{
-		
 		var token = _CancellationTokenSource.Token;
-		_Client = chatClient ?? new ChatClient(Channel, _Settings.ChatBotName, _Settings.OAuthToken, _Logger);
-		
+
 		_Client.NewMessage += async (sender, args) =>
 		{
 
@@ -58,9 +49,10 @@ public class TwitchChatProvider : ISocialMediaProvider, IDisposable
 				Provider = this.Id,
 				ProviderId = args.MessageId,
 				SourceUri = new Uri($"https://twitch.tv/{Channel}"),
-				Author = new Creator {
+				Author = new Creator
+				{
 					ProfileUri = new Uri($"https://twitch.tv/{args.UserName}"),
-					ProfileImageUri = new Uri(profileUrl),		
+					ProfileImageUri = new Uri(profileUrl),
 					DisplayName = args.DisplayName,
 					UserName = $"@{args.DisplayName}"
 				},
@@ -69,9 +61,8 @@ public class TwitchChatProvider : ISocialMediaProvider, IDisposable
 				Timestamp = args.Timestamp
 			});
 		};
-		
-		_Client.Init();
 
+		_Client.Init();
 	}
 
 	private async Task<string> IdentifyProfilePic(string userName)
@@ -81,12 +72,12 @@ public class TwitchChatProvider : ISocialMediaProvider, IDisposable
 
 	public Task<IEnumerable<Content>> GetContentForHashtag(Hashtag tag, DateTimeOffset since)
 	{
-		
+
 		var messages = _Contents.ToList();
 		if (messages.Count() == 0) return Task.FromResult(Enumerable.Empty<Content>());
 
 		var messageCount = messages.Count();
-		for (var i=0; i<messageCount; i++)
+		for (var i = 0; i < messageCount; i++)
 		{
 			_Contents.TryDequeue(out _);
 		}
@@ -103,7 +94,7 @@ public class TwitchChatProvider : ISocialMediaProvider, IDisposable
 		{
 			if (disposing)
 			{
-				_Client.Dispose();
+				_Client?.Dispose();
 			}
 
 			// TODO: free unmanaged resources (unmanaged objects) and override finalizer

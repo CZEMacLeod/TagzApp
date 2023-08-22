@@ -1,61 +1,64 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using System;
-using Microsoft.Extensions.Options;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Net.Http;
+﻿using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
-using System.Net.WebSockets;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace TagzApp.Providers.TwitchChat;
 
 
-public class ChatClient : IChatClient
+public partial class ChatClient : IChatClient
 {
 
 	public const string LOGGER_CATEGORY = "Providers.TwitchChat";
-	private TcpClient _TcpClient;
-	private StreamReader inputStream;
-	private StreamWriter outputStream;
-	private int _Retries;
-	private Task _ReceiveMassagesTask;
-	private MemoryStream _ReceiveStream = new MemoryStream();
+	private TcpClient? _TcpClient;
+	private StreamReader? _InputStream;
+	private StreamWriter? _OutputStream;
 
-	internal static readonly Regex reUserName = new Regex(@"!([^@]+)@");
-	internal static readonly Regex reBadges = new Regex(@"badges=([^;]*)");
-	internal static readonly Regex reDisplayName = new Regex(@"display-name=([^;]*)");
-	internal static readonly Regex reTimestamp = new Regex(@"tmi-sent-ts=(\d+)");
-	internal static readonly Regex reMessageId = new Regex(@"id=([^;]*)");
+	[GeneratedRegex("!([^@]+)@")]
+	private static partial Regex UserNameRegEx();
 
-	internal static Regex reChatMessage;
-	internal static Regex reWhisperMessage;
+	[GeneratedRegex("badges=([^;]*)")]
+	private static partial Regex BadgesRegEx();
 
-	public event EventHandler<NewMessageEventArgs> NewMessage;
+	[GeneratedRegex("display-name=([^;]*)")]
+	private static partial Regex DisplayNameRegEx();
 
-	private DateTime _NextReset;
-	private int _RemainingThrottledCommands;
-	// private static readonly ReaderWriterLockSlim _
+	[GeneratedRegex("tmi-sent-ts=(\\d+)")]
+	private static partial Regex TimeStampRegEx();
+
+	[GeneratedRegex("id=([^;]*)")]
+	private static partial Regex MessageIdRegEx();
+
+	[GeneratedRegex("PRIVMSG #(.*) :(.*)$")]
+	private static partial Regex ChatMessageRegEx();
+
+	[GeneratedRegex("WHISPER (.*) :(.*)$")]
+	private static partial Regex WhisperMessageRegEx();
+
+	//internal static readonly Regex reUserName = UserNameRegEx();
+	//internal static readonly Regex reBadges = BadgesRegEx();
+	//internal static readonly Regex reDisplayName = DisplayNameRegEx();
+	//internal static readonly Regex reTimestamp = TimeStampRegEx();
+	//internal static readonly Regex reMessageId = MessageIdRegEx();
+
+	//internal Regex reChatMessage;
+	//internal Regex reWhisperMessage;
+
+	public event EventHandler<NewMessageEventArgs>? NewMessage;
+
+	private DateTime? _NextReset;
 
 	internal ChatClient(string channelName, string chatBotName, string oauthToken, ILogger logger)
 	{
 
-		this.ChannelName = channelName;
-		this.ChatBotName = chatBotName;
+		ChannelName = channelName;
+		ChatBotName = chatBotName;
 		_OAuthToken = oauthToken;
-		this.Logger = logger;
+		Logger = logger;
 
-		reChatMessage = new Regex($@"PRIVMSG #{channelName} :(.*)$");
-		reWhisperMessage = new Regex($@"WHISPER {chatBotName} :(.*)$");
+		//reChatMessage = new Regex($@"PRIVMSG #{channelName} :(.*)$");
+		//reWhisperMessage = new Regex($@"WHISPER {chatBotName} :(.*)$");
 
 		_Shutdown = new CancellationTokenSource();
 
@@ -73,6 +76,7 @@ public class ChatClient : IChatClient
 		Dispose(false);
 	}
 
+	[MemberNotNull(nameof(_TcpClient), nameof(_InputStream), nameof(_OutputStream), nameof(_ReceiveMessagesThread))]
 	public void Init()
 	{
 
@@ -91,23 +95,24 @@ public class ChatClient : IChatClient
 	private readonly string _OAuthToken;
 	private readonly CancellationTokenSource _Shutdown;
 
+	[MemberNotNull(nameof(_TcpClient), nameof(_InputStream), nameof(_OutputStream))]
 	private void Connect()
 	{
 
 		_TcpClient = new TcpClient("irc.chat.twitch.tv", 80);
 
-		inputStream = new StreamReader(_TcpClient.GetStream());
-		outputStream = new StreamWriter(_TcpClient.GetStream());
+		_InputStream = new StreamReader(_TcpClient.GetStream());
+		_OutputStream = new StreamWriter(_TcpClient.GetStream());
 
 		Logger.LogTrace("Beginning IRC authentication to Twitch");
-		outputStream.WriteLine("CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership");
-		outputStream.WriteLine($"PASS oauth:{_OAuthToken}");
-		outputStream.WriteLine($"NICK {ChatBotName}");
-		outputStream.WriteLine($"USER {ChatBotName} 8 * :{ChatBotName}");
-		outputStream.Flush();
+		_OutputStream.WriteLine("CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership");
+		_OutputStream.WriteLine($"PASS oauth:{_OAuthToken}");
+		_OutputStream.WriteLine($"NICK {ChatBotName}");
+		_OutputStream.WriteLine($"USER {ChatBotName} 8 * :{ChatBotName}");
+		_OutputStream.Flush();
 
-		outputStream.WriteLine($"JOIN #{ChannelName}");
-		outputStream.Flush();
+		_OutputStream.WriteLine($"JOIN #{ChannelName}");
+		_OutputStream.Flush();
 
 		//Connected?.Invoke(this, new ChatConnectedEventArgs());
 
@@ -120,25 +125,25 @@ public class ChatClient : IChatClient
 
 		Thread.Sleep(throttled.GetValueOrDefault(TimeSpan.FromSeconds(0)));
 
-		outputStream.WriteLine(message);
-		if (flush)
+		if (_OutputStream is null)
 		{
-			outputStream.Flush();
+			Init();
 		}
 
+		_OutputStream.WriteLine(message);
+		if (flush)
+		{
+			_OutputStream.Flush();
+		}
 	}
 
 	private TimeSpan? CheckThrottleStatus()
 	{
 
 		var throttleDuration = TimeSpan.FromSeconds(30);
-		var maximumCommands = 100;
+		//var maximumCommands = 100;
 
-		if (_NextReset == null)
-		{
-			_NextReset = DateTime.UtcNow.Add(throttleDuration);
-		}
-		else if (_NextReset < DateTime.UtcNow)
+		if (_NextReset == null || _NextReset.Value < DateTime.UtcNow)
 		{
 			_NextReset = DateTime.UtcNow.Add(throttleDuration);
 		}
@@ -184,7 +189,7 @@ public class ChatClient : IChatClient
 
 			if (DateTime.Now.Subtract(lastMessageReceivedTimestamp) > errorPeriod)
 			{
-				Logger.LogError($"Haven't received a message in {errorPeriod.TotalSeconds} seconds");
+				Logger.LogError("Haven't received a message in {errorPeriod} seconds", errorPeriod.TotalSeconds);
 				lastMessageReceivedTimestamp = DateTime.Now;
 			}
 
@@ -193,7 +198,7 @@ public class ChatClient : IChatClient
 				break;
 			}
 
-			if (_TcpClient.Connected && _TcpClient.Available > 0)
+			if (_TcpClient?.Connected ?? false && _TcpClient.Available > 0)
 			{
 
 				var msg = ReadMessage();
@@ -203,7 +208,7 @@ public class ChatClient : IChatClient
 				}
 
 				lastMessageReceivedTimestamp = DateTime.Now;
-				Logger.LogTrace($"> {msg}");
+				Logger.LogTrace("> {msg}", msg);
 
 				// Handle the Twitch keep-alive
 				if (msg.StartsWith("PING"))
@@ -216,12 +221,12 @@ public class ChatClient : IChatClient
 				ProcessMessage(msg);
 
 			}
-			else if (!_TcpClient.Connected)
+			else if (_TcpClient is null || !_TcpClient.Connected)
 			{
 				// Reconnect
 				Logger.LogWarning("Disconnected from Twitch.. Reconnecting in 2 seconds");
 				Thread.Sleep(2000);
-				this.Init();
+				Init();
 				return;
 			}
 
@@ -236,10 +241,7 @@ public class ChatClient : IChatClient
 
 		// Logger.LogTrace("Processing message: " + msg);
 
-		var userName = "";
-		var message = "";
-
-		userName = ChatClient.reUserName.Match(msg).Groups[1].Value;
+		var userName = UserNameRegEx().Match(msg).Groups[1].Value;
 		//if (userName.Equals(ChatBotName, StringComparison.InvariantCultureIgnoreCase)) return; // Exit and do not process if the bot posted this message
 
 
@@ -249,17 +251,19 @@ public class ChatClient : IChatClient
 		//}
 
 		// Review messages sent to the channel
-		if (reChatMessage.IsMatch(msg))
+
+		var chat = ChatMessageRegEx().Match(msg);
+		if (chat.Success && chat.Groups[1].Value== ChannelName)
 		{
 
-			var displayName = ChatClient.reDisplayName.Match(msg).Groups[1].Value;
-			var timestamp = long.Parse(ChatClient.reTimestamp.Match(msg).Groups[1].Value);
-			var messageId = ChatClient.reMessageId.Match(msg).Groups[1].Value;
+			var displayName = DisplayNameRegEx().Match(msg).Groups[1].Value;
+			var timestamp = long.Parse(TimeStampRegEx().Match(msg).Groups[1].Value);
+			var messageId = MessageIdRegEx().Match(msg).Groups[1].Value;
 
-			var badges = ChatClient.reBadges.Match(msg).Groups[1].Value.Split(',');
+			var badges = BadgesRegEx().Match(msg).Groups[1].Value.Split(',');
 
-			message = ChatClient.reChatMessage.Match(msg).Groups[1].Value;
-			Logger.LogTrace($"Message received from '{userName}': {message}");
+			var message = chat.Groups[2].Value;
+			Logger.LogTrace("Message received from '{userName}': {message}", userName, message);
 			NewMessage?.Invoke(this, new NewMessageEventArgs
 			{
 				MessageId = messageId,
@@ -270,37 +274,43 @@ public class ChatClient : IChatClient
 				Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(timestamp)
 			});
 
+		} else
+		{
+			//var whisper = WhisperMessageRegEx().Match(msg);
+			//if (whisper.Success && whisper.Groups[1].Value== ChatBotName)
+			//{
+			//	var message = whisper.Groups[2].Value;
+			//	Logger.LogTrace("Whisper received from '{userName}': {message}", userName, message);
+
+			//	NewMessage?.Invoke(this, new NewMessageEventArgs
+			//	{
+			//		UserName = userName,
+			//		Message = message,
+			//		Badges = Array.Empty<string>(),
+			//		IsWhisper = true
+			//	});
+			//}
 		}
-		//else if (reWhisperMessage.IsMatch(msg))
-		//{
-
-		//	message = ChatClient.reWhisperMessage.Match(msg).Groups[1].Value;
-		//	Logger.LogTrace($"Whisper received from '{userName}': {message}");
-
-		//	NewMessage?.Invoke(this, new NewMessageEventArgs
-		//	{
-		//		UserName = userName,
-		//		Message = message,
-		//		Badges = (badges ?? new string[] { }),
-		//		IsWhisper = true
-		//	});
-
-		//}
-
+		
 	}
 
 	private string ReadMessage()
 	{
 
-		string message = null;
+		string? message = null;
+
+		if (_InputStream is null)
+		{
+			Init();
+		}
 
 		try
 		{
-			message = inputStream.ReadLine();
+			message = _InputStream.ReadLine();
 		}
 		catch (Exception ex)
 		{
-			Logger.LogError("Error reading messages: " + ex);
+			Logger.LogError(ex, "Error reading messages: {message}", ex.Message);
 		}
 
 		return message ?? "";
@@ -308,8 +318,8 @@ public class ChatClient : IChatClient
 	}
 
 	#region IDisposable Support
-	private bool disposedValue = false; // To detect redundant calls
-	private Thread _ReceiveMessagesThread;
+	private bool _DisposedValue = false; // To detect redundant calls
+	private Thread? _ReceiveMessagesThread;
 
 	protected virtual void Dispose(bool disposing)
 	{
@@ -320,7 +330,7 @@ public class ChatClient : IChatClient
 		}
 		catch { }
 
-		if (!disposedValue)
+		if (!_DisposedValue)
 		{
 			if (disposing)
 			{
@@ -328,7 +338,7 @@ public class ChatClient : IChatClient
 			}
 
 			_TcpClient?.Dispose();
-			disposedValue = true;
+			_DisposedValue = true;
 		}
 	}
 
@@ -338,6 +348,7 @@ public class ChatClient : IChatClient
 		Dispose(true);
 		GC.SuppressFinalize(this);
 	}
+
 	#endregion
 }
 
