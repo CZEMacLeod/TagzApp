@@ -7,12 +7,12 @@ namespace TagzApp.Providers.TwitchChat;
 public class StartTwitchChat : IConfigureProvider
 {
 
-	private const string ConfigurationKey = "providers:twitchchat";
+	public const string ConfigurationKey = "providers:twitchchat";
 
 	public IServiceCollection RegisterServices(IServiceCollection services, IConfiguration configuration)
 	{
 
-		IConfiguration config = null;
+		IConfiguration? config;
 		try
 		{
 			config = configuration.GetSection(ConfigurationKey);

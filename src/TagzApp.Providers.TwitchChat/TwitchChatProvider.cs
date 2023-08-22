@@ -25,15 +25,12 @@ public class TwitchChatProvider : ISocialMediaProvider, IDisposable
 		_Settings = settings.Value;
 		_Logger = logger;
 		_ProfileRepository = new TwitchProfileRepository(_Settings.ClientId, _Settings.ClientSecret, clientFactory.CreateClient("TwitchProfile"));
-		_Client = new ChatClient(Channel, _Settings.ChatBotName, _Settings.OAuthToken, _Logger);
+		_Client = new ChatClient(_Settings.Channel, _Settings.ChatBotName, _Settings.OAuthToken, _Logger);
 
 		ListenForMessages();
 	}
 
-	/// <summary>
-	/// The Twitch channel to monitor
-	/// </summary>
-	public string Channel { get; set; } = "csharpfritz";
+
 
 	private async Task ListenForMessages(IChatClient chatClient = null)
 	{
@@ -48,7 +45,7 @@ public class TwitchChatProvider : ISocialMediaProvider, IDisposable
 			{
 				Provider = this.Id,
 				ProviderId = args.MessageId,
-				SourceUri = new Uri($"https://twitch.tv/{Channel}"),
+				SourceUri = new Uri($"https://twitch.tv/{_Settings.Channel}"),
 				Author = new Creator
 				{
 					ProfileUri = new Uri($"https://twitch.tv/{args.UserName}"),
